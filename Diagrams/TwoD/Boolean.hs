@@ -4,7 +4,9 @@
 -- | Set operations on paths.  Only loops are used, lines are removed
 -- from each path before each operation.
 module Diagrams.TwoD.Boolean
-       (union, difference, intersection, exclusion)
+       (trailsUnion, trailsDifference,
+        trailsIntersection, trailsExclusion,
+        simpleUnion, union, difference, intersection, exclusion)
        where
 import Diagrams.Prelude
 import Data.Maybe
@@ -24,85 +26,97 @@ loop2path t =
       (C.Point x y, C.JoinCurve (C.Point (x+x1) (y+y1)) (C.Point (x+x2) (y+y2))) :
       go (x+x3) (y+y3) r
 
-path2trail :: C.ClosedPath Double -> Maybe (Located (Trail V2 Double))
-path2trail (C.ClosedPath []) = Nothing
-path2trail (C.ClosedPath ((C.Point x y, join):r)) =
-  Just $ fromSegments (go 0 0 join r) `at` P (V2 x y)
+path2loop :: C.ClosedPath Double -> Located (Trail' Loop V2 Double)
+path2loop (C.ClosedPath []) = fromSegments [] `at` origin
+path2loop (C.ClosedPath ((C.Point x0 y0, join):r)) =
+  fromSegments (go x0 y0 join r) `at` P (V2 x0 y0)
   where go x y C.JoinLine [] =
-          [straight (V2 (-x) (-y))]
-        go x1 y1 C.JoinLine ((C.Point x2 y2, join'):r') =
-          straight (V2 (x2-x1) (y2-y1)):
+          [straight (V2 (x0-x) (y0-y))]
+        go x y C.JoinLine ((C.Point x2 y2, join'):r') =
+          straight (V2 (x2-x) (y2-y)):
           go x2 y2 join' r'
         go x y (C.JoinCurve (C.Point x1 y1) (C.Point x2 y2)) r' =
           case r' of
-           [] -> [bezier3 (V2 (x1-x) (y1-x))
-                  (V2 (x2-x) (y2-y)) (V2 (-x) (-y))]
+           [] -> [bezier3 (V2 (x1-x) (y1-y))
+                  (V2 (x2-x) (y2-y)) (V2 (x0-x) (y0-y))]
            ((C.Point x3 y3, join'):r'') ->
-             bezier3 (V2 (x1-x) (y1-x)) (V2 (x2-x) (y2-y))
+             bezier3 (V2 (x1-x) (y1-y)) (V2 (x2-x) (y2-y))
              (V2 (x3-x) (y3-y)) :
              go x3 y3 join' r''
 
-trail2path :: Located (Trail V2 Double) -> Maybe (C.ClosedPath Double)
-trail2path =
-  fmap loop2path .
-  located (withTrail (const Nothing) Just)
+trail2loop :: Located (Trail V2 Double) -> Maybe (Located (Trail' Loop V2 Double))
+trail2loop = located (withTrail (const Nothing) Just)
 
-trailsUnion :: [Located (Trail V2 Double)]
-            -> Double -> [Located (Trail V2 Double)]
+loop2trail :: Located (Trail' Loop V2 Double) -> Located (Trail V2 Double)
+loop2trail = over located wrapLoop
+
+-- | Union of a list of loops, by removing overlap.
+trailsUnion :: [Located (Trail' Loop V2 Double)]
+            -> Double -> [Located (Trail' Loop V2 Double)]
 trailsUnion p tol =
-  mapMaybe path2trail $ C.union (mapMaybe trail2path p) tol
+  map path2loop $ C.union (map loop2path p) tol
 
-trailsDifference :: [Located (Trail V2 Double)]
-                 -> [Located (Trail V2 Double)]
+trailsDifference :: [Located (Trail' Loop V2 Double)]
+                 -> [Located (Trail' Loop V2 Double)]
                  -> Double
-                 -> [Located (Trail V2 Double)]
+                 -> [Located (Trail' Loop V2 Double)]
 trailsDifference p1 p2 tol =
-  mapMaybe path2trail $ C.difference (mapMaybe trail2path p1)
-  (mapMaybe trail2path p2) tol
+  map path2loop $ C.difference (map loop2path p1)
+  (map loop2path p2) tol
 
-trailsIntersection :: [Located (Trail V2 Double)]
-                   -> [Located (Trail V2 Double)]
+trailsIntersection :: [Located (Trail' Loop V2 Double)]
+                   -> [Located (Trail' Loop V2 Double)]
                    -> Double
-                   -> [Located (Trail V2 Double)]
+                   -> [Located (Trail' Loop V2 Double)]
 trailsIntersection p1 p2 tol =
-  mapMaybe path2trail $ C.intersection (mapMaybe trail2path p1)
-  (mapMaybe trail2path p2) tol
+  map path2loop $ C.intersection (map loop2path p1)
+  (map loop2path p2) tol
 
-trailsExclusion :: [Located (Trail V2 Double)]
-                -> [Located (Trail V2 Double)]
+trailsExclusion :: [Located (Trail' Loop V2 Double)]
+                -> [Located (Trail' Loop V2 Double)]
                 -> Double
-                -> [Located (Trail V2 Double)]
+                -> [Located (Trail' Loop V2 Double)]
 trailsExclusion p1 p2 tol =
-  mapMaybe path2trail $ C.exclusion (mapMaybe trail2path p1)
-  (mapMaybe trail2path p2) tol
+  map path2loop $ C.exclusion (map loop2path p1)
+  (map loop2path p2) tol
 
 -- | Remove overlapping regions in the path.
 union :: (ToPath t, N t ~ Double, V t ~ V2) =>
          t -> Double -> Path V2 Double
 union p tol =
-  Path $ trailsUnion (pathTrails (toPath p)) tol
+  Path $ map loop2trail $ 
+  trailsUnion (mapMaybe trail2loop $ pathTrails (toPath p)) tol
 
 -- | Intersection of two paths.
 intersection :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
                  V t1 ~ V2, V t ~ V2) =>
                 t -> t1 -> Double -> Path V2 Double
 intersection p1 p2 tol =
-  Path $ trailsIntersection (pathTrails (toPath p1))
-  (pathTrails (toPath p2)) tol
+  Path $ map loop2trail $
+  trailsIntersection
+  (mapMaybe trail2loop $ pathTrails (toPath p1))
+  (mapMaybe trail2loop $ pathTrails (toPath p2))
+  tol
 
 -- | difference of two paths.
 difference :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
                V t1 ~ V2, V t ~ V2) =>
               t -> t1 -> Double -> Path V2 Double
 difference p1 p2 tol =
-  Path $ trailsDifference (pathTrails (toPath p1))
-  (pathTrails (toPath p2)) tol
+  Path $ map loop2trail $
+  trailsDifference
+  (mapMaybe trail2loop $ pathTrails (toPath p1))
+  (mapMaybe trail2loop $ pathTrails (toPath p2))
+  tol
 
 -- | Exclusion (exclusive or) of two paths.
 exclusion :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
               V t1 ~ V2, V t ~ V2) =>
              t -> t1 -> Double -> Path V2 Double
 exclusion p1 p2 tol =
-  Path $ trailsExclusion (pathTrails (toPath p1))
-  (pathTrails (toPath p2)) tol
+  Path $ map loop2trail $
+  trailsExclusion
+  (mapMaybe trail2loop $ pathTrails (toPath p1))
+  (mapMaybe trail2loop $ pathTrails (toPath p2))
+  tol
 
