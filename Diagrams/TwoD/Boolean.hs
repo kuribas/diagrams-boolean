@@ -4,9 +4,9 @@
 -- | Set operations on paths.  Only loops are used, lines are removed
 -- from each path before each operation.
 module Diagrams.TwoD.Boolean
-       (trailsUnion, trailsDifference,
-        trailsIntersection, trailsExclusion,
-        simpleUnion, union, difference, intersection, exclusion)
+       (loopUnion, loopDifference,
+        loopIntersection, loopExclusion,
+        union, difference, intersection, exclusion)
        where
 import Diagrams.Prelude
 import Data.Maybe
@@ -51,41 +51,44 @@ loop2trail :: Located (Trail' Loop V2 Double) -> Located (Trail V2 Double)
 loop2trail = over located wrapLoop
 
 -- | Union of a list of loops, by removing overlap.
-trailsUnion :: [Located (Trail' Loop V2 Double)]
+loopUnion :: [Located (Trail' Loop V2 Double)]
             -> Double -> [Located (Trail' Loop V2 Double)]
-trailsUnion p tol =
+loopUnion p tol =
   map path2loop $ C.union (map loop2path p) tol
 
-trailsDifference :: [Located (Trail' Loop V2 Double)]
+-- | Difference between loops.  The loops in each lists are first merged using `union`.
+loopDifference :: [Located (Trail' Loop V2 Double)]
                  -> [Located (Trail' Loop V2 Double)]
                  -> Double
                  -> [Located (Trail' Loop V2 Double)]
-trailsDifference p1 p2 tol =
+loopDifference p1 p2 tol =
   map path2loop $ C.difference (map loop2path p1)
   (map loop2path p2) tol
 
-trailsIntersection :: [Located (Trail' Loop V2 Double)]
+-- | Intersection of loops.  The loops in each lists are first merged using `union`.
+loopIntersection :: [Located (Trail' Loop V2 Double)]
                    -> [Located (Trail' Loop V2 Double)]
                    -> Double
                    -> [Located (Trail' Loop V2 Double)]
-trailsIntersection p1 p2 tol =
+loopIntersection p1 p2 tol =
   map path2loop $ C.intersection (map loop2path p1)
   (map loop2path p2) tol
 
-trailsExclusion :: [Located (Trail' Loop V2 Double)]
+-- | Exclusion (xor) of loops. The loops in each lists are first merged using `union`.
+loopExclusion :: [Located (Trail' Loop V2 Double)]
                 -> [Located (Trail' Loop V2 Double)]
                 -> Double
                 -> [Located (Trail' Loop V2 Double)]
-trailsExclusion p1 p2 tol =
+loopExclusion p1 p2 tol =
   map path2loop $ C.exclusion (map loop2path p1)
   (map loop2path p2) tol
 
--- | Remove overlapping regions in the path.
+-- | Remove overlapping regions in the path. 
 union :: (ToPath t, N t ~ Double, V t ~ V2) =>
          t -> Double -> Path V2 Double
 union p tol =
   Path $ map loop2trail $ 
-  trailsUnion (mapMaybe trail2loop $ pathTrails (toPath p)) tol
+  loopUnion (mapMaybe trail2loop $ pathTrails (toPath p)) tol
 
 -- | Intersection of two paths.
 intersection :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
@@ -93,7 +96,7 @@ intersection :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
                 t -> t1 -> Double -> Path V2 Double
 intersection p1 p2 tol =
   Path $ map loop2trail $
-  trailsIntersection
+  loopIntersection
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
   tol
@@ -104,7 +107,7 @@ difference :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
               t -> t1 -> Double -> Path V2 Double
 difference p1 p2 tol =
   Path $ map loop2trail $
-  trailsDifference
+  loopDifference
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
   tol
@@ -115,7 +118,7 @@ exclusion :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
              t -> t1 -> Double -> Path V2 Double
 exclusion p1 p2 tol =
   Path $ map loop2trail $
-  trailsExclusion
+  loopExclusion
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
   tol
