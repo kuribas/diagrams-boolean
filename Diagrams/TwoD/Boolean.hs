@@ -1,8 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
--- | Set operations on paths.  Only loops are used, lines are removed
--- from each path before each operation.
+-- | Set operations on paths.  Open lines are removed from each path
+-- (even those ending in the starting point), and overlap is removed
+-- from loops.
+
 module Diagrams.TwoD.Boolean
        (loopUnion, loopDifference,
         loopIntersection, loopExclusion,
@@ -11,6 +13,10 @@ module Diagrams.TwoD.Boolean
 import Diagrams.Prelude
 import Data.Maybe
 import qualified Geom2D.CubicBezier as C
+
+fillrule :: FillRule -> C.FillRule
+fillrule Winding = C.NonZero
+fillrule EvenOdd = C.EvenOdd
 
 loop2path :: Located (Trail' Loop V2 Double) -> C.ClosedPath Double
 loop2path t =
@@ -52,74 +58,76 @@ loop2trail = over located wrapLoop
 
 -- | Union of a list of loops, by removing overlap.
 loopUnion :: [Located (Trail' Loop V2 Double)]
-            -> Double -> [Located (Trail' Loop V2 Double)]
-loopUnion p tol =
-  map path2loop $ C.union (map loop2path p) tol
+          -> FillRule -> Double
+          -> [Located (Trail' Loop V2 Double)]
+loopUnion p fill tol =
+  map path2loop $ C.union (map loop2path p) (fillrule fill) tol
 
 -- | Difference between loops.  The loops in each lists are first merged using `union`.
 loopDifference :: [Located (Trail' Loop V2 Double)]
                  -> [Located (Trail' Loop V2 Double)]
-                 -> Double
+                 -> FillRule -> Double 
                  -> [Located (Trail' Loop V2 Double)]
-loopDifference p1 p2 tol =
+loopDifference p1 p2 fill tol =
   map path2loop $ C.difference (map loop2path p1)
-  (map loop2path p2) tol
+  (map loop2path p2) (fillrule fill) tol
 
 -- | Intersection of loops.  The loops in each lists are first merged using `union`.
 loopIntersection :: [Located (Trail' Loop V2 Double)]
                    -> [Located (Trail' Loop V2 Double)]
-                   -> Double
+                   -> FillRule -> Double
                    -> [Located (Trail' Loop V2 Double)]
-loopIntersection p1 p2 tol =
+loopIntersection p1 p2 fill tol =
   map path2loop $ C.intersection (map loop2path p1)
-  (map loop2path p2) tol
+  (map loop2path p2) (fillrule fill) tol
 
 -- | Exclusion (xor) of loops. The loops in each lists are first merged using `union`.
 loopExclusion :: [Located (Trail' Loop V2 Double)]
                 -> [Located (Trail' Loop V2 Double)]
-                -> Double
+                -> FillRule -> Double
                 -> [Located (Trail' Loop V2 Double)]
-loopExclusion p1 p2 tol =
+loopExclusion p1 p2 fill tol =
   map path2loop $ C.exclusion (map loop2path p1)
-  (map loop2path p2) tol
+  (map loop2path p2) (fillrule fill) tol
 
 -- | Remove overlapping regions in the path. 
 union :: (ToPath t, N t ~ Double, V t ~ V2) =>
-         t -> Double -> Path V2 Double
-union p tol =
+         t -> FillRule -> Double -> Path V2 Double
+union p fill tol =
   Path $ map loop2trail $ 
-  loopUnion (mapMaybe trail2loop $ pathTrails (toPath p)) tol
+     loopUnion (mapMaybe trail2loop $ pathTrails (toPath p)) fill tol
 
 -- | Intersection of two paths.
 intersection :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
                  V t1 ~ V2, V t ~ V2) =>
-                t -> t1 -> Double -> Path V2 Double
-intersection p1 p2 tol =
+                t -> t1 -> FillRule -> Double -> Path V2 Double
+intersection p1 p2 fill tol =
   Path $ map loop2trail $
   loopIntersection
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
+  fill
   tol
 
 -- | difference of two paths.
 difference :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
                V t1 ~ V2, V t ~ V2) =>
-              t -> t1 -> Double -> Path V2 Double
-difference p1 p2 tol =
+              t -> t1 -> FillRule -> Double -> Path V2 Double
+difference p1 p2 fill tol =
   Path $ map loop2trail $
   loopDifference
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
-  tol
+  fill tol
 
 -- | Exclusion (exclusive or) of two paths.
 exclusion :: (ToPath t1, ToPath t, N t1 ~ Double, N t ~ Double,
               V t1 ~ V2, V t ~ V2) =>
-             t -> t1 -> Double -> Path V2 Double
-exclusion p1 p2 tol =
+             t -> t1 -> FillRule -> Double -> Path V2 Double
+exclusion p1 p2 fill tol =
   Path $ map loop2trail $
   loopExclusion
   (mapMaybe trail2loop $ pathTrails (toPath p1))
   (mapMaybe trail2loop $ pathTrails (toPath p2))
-  tol
+  fill tol
 
