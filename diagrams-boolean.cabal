@@ -12,6 +12,7 @@ Bug-Reports: 	https://github.com/kuribas/diagrams-boolean/issues
 Build-type:	Simple
 Cabal-version:	>=1.8
 Description:	set operations (union, intersection, difference and exclusion) on paths in Diagrams.
+extra-doc-files: samples/union.svg, samples/difference.svg, samples/exclusion.svg, samples/intersection.svg
  
 source-repository head
   type:		git
